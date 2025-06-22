@@ -1,180 +1,151 @@
-const app = require( "express")();
-const server = require( "http" ).Server( app );
-const bodyParser = require( "body-parser" );
-const Datastore = require( "nedb" );
-const btoa = require('btoa');
-app.use( bodyParser.json() );
+import { getDb } from '../src/database.js';
+// Assuming 'btoa' is available globally in the browser environment.
+// If not, it might need to be imported or polyfilled if this code runs where btoa is not defined.
+// The original project had 'btoa' as a dependency, implying it might have been used in Node.js.
 
-module.exports = app;
-
-const createDirectory = require("./functions");
-var _path = createDirectory('POS');
-_path = createDirectory('POS/server');
-_path = createDirectory('POS/server/databases');
-const path = require("path");
-const os = require("os");
- 
-let usersDB = new Datastore( {
-    filename: path.join(os.homedir(),".storepos/POS/server/databases/users.db"),
-    autoload: true
-} );
-
-
-usersDB.ensureIndex({ fieldName: '_id', unique: true });
-
-
-app.get( "/", function ( req, res ) {
-    res.send( "Users API" );
-} );
-
-
-  
-app.get( "/user/:userId", function ( req, res ) {
-    if ( !req.params.userId ) {
-        res.status( 500 ).send( "ID field is required." );
+export async function getUserById(userId) {
+    if (!userId) {
+        throw new Error("ID field is required.");
     }
-    else{
-    usersDB.findOne( {
-        _id: parseInt(req.params.userId)
-}, function ( err, docs ) {
-        res.send( docs );
-    } );
+    const db = await getDb();
+    const parsedUserId = parseInt(userId);
+    const userQuery = db.exec("SELECT * FROM users WHERE _id = ?", [parsedUserId]);
+    if (userQuery.length === 0 || userQuery[0].values.length === 0) {
+        return null;
     }
-} );
+    const columns = userQuery[0].columns;
+    const values = userQuery[0].values[0];
+    const result = {};
+    columns.forEach((col, i) => result[col] = values[i]);
+    return result;
+}
 
-
-
-app.get( "/logout/:userId", function ( req, res ) {
-    if ( !req.params.userId ) {
-        res.status( 500 ).send( "ID field is required." );
+export async function logoutUser(userId) {
+    if (!userId) {
+        throw new Error("ID field is required for logout.");
     }
-    else{ usersDB.update( {
-            _id: parseInt(req.params.userId)
-        }, {
-            $set: {
-                status: 'Logged Out_'+ new Date()
-            }
-        }, {},
-    );
+    const db = await getDb();
+    const parsedUserId = parseInt(userId);
+    const newStatus = 'Logged Out_' + new Date().toISOString();
+    db.run('UPDATE users SET status = ? WHERE _id = ?', [newStatus, parsedUserId]);
+    return { message: "User status updated to logged out.", userId: parsedUserId };
+}
 
-    res.sendStatus( 200 );
- 
+export async function loginUser(username, password) {
+    const db = await getDb();
+    const encodedPassword = btoa(password); // Replicating original encoding
+
+    const userQuery = db.exec("SELECT * FROM users WHERE username = ? AND password = ?", [username, encodedPassword]);
+
+    if (userQuery.length === 0 || userQuery[0].values.length === 0) {
+        return null; // User not found or password incorrect
     }
-});
 
+    const columns = userQuery[0].columns;
+    const values = userQuery[0].values[0];
+    const user = {};
+    columns.forEach((col, i) => user[col] = values[i]);
 
-
-app.post( "/login", function ( req, res ) {  
-    usersDB.findOne( {
-        username: req.body.username,
-        password: btoa(req.body.password)
-
-}, function ( err, docs ) {
-        if(docs) {
-            usersDB.update( {
-                _id: docs._id
-            }, {
-                $set: {
-                    status: 'Logged In_'+ new Date()
-                }
-            }, {},
-            
-        );
-        }
-        res.send( docs );
-    } );
+    const newStatus = 'Logged In_' + new Date().toISOString();
+    db.run('UPDATE users SET status = ? WHERE _id = ?', [newStatus, user._id]);
     
-} );
+    user.status = newStatus; // Update status in the returned object
+    return user;
+}
 
-
-
-
-app.get( "/all", function ( req, res ) {
-    usersDB.find( {}, function ( err, docs ) {
-        res.send( docs );
-    } );
-} );
-
-
-
-app.delete( "/user/:userId", function ( req, res ) {
-    usersDB.remove( {
-        _id: parseInt(req.params.userId)
-    }, function ( err, numRemoved ) {
-        if ( err ) res.status( 500 ).send( err );
-        else res.sendStatus( 200 );
-    } );
-} );
-
- 
-app.post( "/post" , function ( req, res ) {   
-    let User = { 
-            "username": req.body.username,
-            "password": btoa(req.body.password),
-            "fullname": req.body.fullname,
-            "perm_products": req.body.perm_products == "on" ? 1 : 0,
-            "perm_categories": req.body.perm_categories == "on" ? 1 : 0,
-            "perm_transactions": req.body.perm_transactions == "on" ? 1 : 0,
-            "perm_users": req.body.perm_users == "on" ? 1 : 0,
-            "perm_settings": req.body.perm_settings == "on" ? 1 : 0,
-            "status": ""
-          }
-
-    if(req.body.id == "") { 
-       User._id = Math.floor(Date.now() / 1000);
-       usersDB.insert( User, function ( err, user ) {
-            if ( err ) res.status( 500 ).send( req );
-            else res.send( user );
-        });
+export async function getAllUsers() {
+    const db = await getDb();
+    const usersQuery = db.exec("SELECT * FROM users");
+    if (usersQuery.length === 0 || usersQuery[0].values.length === 0) {
+        return [];
     }
-    else { 
-        usersDB.update( {
-            _id: parseInt(req.body.id)
-                    }, {
-                        $set: {
-                            username: req.body.username,
-                            password: btoa(req.body.password),
-                            fullname: req.body.fullname,
-                            perm_products: req.body.perm_products == "on" ? 1 : 0,
-                            perm_categories: req.body.perm_categories == "on" ? 1 : 0,
-                            perm_transactions: req.body.perm_transactions == "on" ? 1 : 0,
-                            perm_users: req.body.perm_users == "on" ? 1 : 0,
-                            perm_settings: req.body.perm_settings == "on" ? 1 : 0
-                        }
-                    }, {}, function (
-            err,
-            numReplaced,
-            user
-        ) {
-            if ( err ) res.status( 500 ).send( err );
-            else res.sendStatus( 200 );
-        } );
+    const columns = usersQuery[0].columns;
+    return usersQuery[0].values.map(row => {
+        const obj = {};
+        columns.forEach((col, i) => obj[col] = row[i]);
+        return obj;
+    });
+}
 
-    }
+export async function deleteUser(userId) {
+    const db = await getDb();
+    const parsedUserId = parseInt(userId);
+    db.run('DELETE FROM users WHERE _id = ?', [parsedUserId]);
+    return { message: "User deleted successfully", deletedId: parsedUserId };
+}
 
-});
+export async function saveUser(userData) {
+    const db = await getDb();
+    const {
+        id,
+        username,
+        password, // Expect raw password
+        fullname,
+        perm_products,
+        perm_categories,
+        perm_transactions,
+        perm_users,
+        perm_settings
+    } = userData;
 
+    if (!username) throw new Error("Username is required.");
+    if (!id && !password) throw new Error("Password is required for new users."); // Password can be optional for updates if not changing
 
-app.get( "/check", function ( req, res ) {
-    usersDB.findOne( {
-        _id: 1
-}, function ( err, docs ) {
-        if(!docs) {
-            let User = { 
-                "_id": 1,
-                "username": "admin",
-                "password": btoa("admin"),
-                "fullname": "Administrator",
-                "perm_products": 1,
-                "perm_categories": 1,
-                "perm_transactions": 1,
-                "perm_users": 1,
-                "perm_settings": 1,
-                "status": ""
-              }
-            usersDB.insert( User, function ( err, user ) {                            
-            });
+    const encodedPassword = password ? btoa(password) : null;
+
+    const userRecord = {
+        username: username,
+        fullname: fullname,
+        perm_products: perm_products == "on" || perm_products === 1 || perm_products === true ? 1 : 0,
+        perm_categories: perm_categories == "on" || perm_categories === 1 || perm_categories === true ? 1 : 0,
+        perm_transactions: perm_transactions == "on" || perm_transactions === 1 || perm_transactions === true ? 1 : 0,
+        perm_users: perm_users == "on" || perm_users === 1 || perm_users === true ? 1 : 0,
+        perm_settings: perm_settings == "on" || perm_settings === 1 || perm_settings === true ? 1 : 0,
+    };
+
+    if (!id) { // New user
+        userRecord._id = Math.floor(Date.now() / 1000);
+        userRecord.password = encodedPassword; // Must have password
+        userRecord.status = ""; // Initial status
+
+        try {
+            db.run(
+                'INSERT INTO users (_id, username, password, fullname, perm_products, perm_categories, perm_transactions, perm_users, perm_settings, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [userRecord._id, userRecord.username, userRecord.password, userRecord.fullname, userRecord.perm_products, userRecord.perm_categories, userRecord.perm_transactions, userRecord.perm_users, userRecord.perm_settings, userRecord.status]
+            );
+            return { ...userRecord }; // Return the newly created user data
+        } catch (e) {
+            if (e.message.includes("UNIQUE constraint failed: users.username")) {
+                throw new Error(`Username "${userRecord.username}" already exists.`);
+            }
+            throw e;
         }
-    } );
-} );
- 
+    } else { // Update existing user
+        const parsedId = parseInt(id);
+        // Fetch existing password if not provided for update
+        let finalPassword = encodedPassword;
+        if (!finalPassword) {
+            const existingUserQuery = db.exec("SELECT password FROM users WHERE _id = ?", [parsedId]);
+            if (existingUserQuery.length > 0 && existingUserQuery[0].values.length > 0) {
+                finalPassword = existingUserQuery[0].values[0][0];
+            } else {
+                throw new Error(`User with ID ${parsedId} not found for password retrieval.`);
+            }
+        }
+
+        try {
+            db.run(
+                'UPDATE users SET username = ?, password = ?, fullname = ?, perm_products = ?, perm_categories = ?, perm_transactions = ?, perm_users = ?, perm_settings = ? WHERE _id = ?',
+                [userRecord.username, finalPassword, userRecord.fullname, userRecord.perm_products, userRecord.perm_categories, userRecord.perm_transactions, userRecord.perm_users, userRecord.perm_settings, parsedId]
+            );
+            return { message: "User updated successfully", updatedId: parsedId };
+        } catch (e) {
+             if (e.message.includes("UNIQUE constraint failed: users.username")) {
+                throw new Error(`Username "${userRecord.username}" already exists on another account.`);
+            }
+            throw e;
+        }
+    }
+}
+
+// The /check route logic for ensuring a default admin is now handled during DB initialization in database.js

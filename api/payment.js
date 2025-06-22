@@ -1,200 +1,131 @@
-const express = require("express");
-const app = require( "express" )();
-const server = require( "http" ).Server( app );
-const bodyParser = require( "body-parser" );
-const Datastore = require( "nedb" );
-const async = require( "async" );
+import { getSettings } from "./settings.js"; // To get Stripe configuration
 
-app.use( bodyParser.json() );
+// NOTE: This module is heavily refactored.
+// Stripe operations requiring a secret key CANNOT be done client-side.
+// A secure backend server is required for most Stripe functionality,
+// especially PaymentIntent creation, capture, and Terminal operations.
+// The functions below are placeholders or adapted for what might be
+// initiated from a client, expecting a backend to handle the secure parts.
 
-module.exports = app;
+// Global Stripe object (Stripe.js) should be loaded in index.html
+// This will be used for client-side tokenization or Payment Element.
+// let stripe = null; // This would be window.Stripe('YOUR_PUBLISHABLE_KEY');
 
-const createDirectory = require("./functions");
-var _path = createDirectory('POS');
-_path = createDirectory('POS/server');
-_path = createDirectory('POS/server/databases');
+let currentStripeSettings = null;
+let stripePublishableKey = null;
+let stripeInstance = null; // Instance of Stripe.js (window.Stripe)
 
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
-
-let stripe = null;
-let locationID = null;
-
-if (fs.existsSync(path.join(os.homedir(),'.storepos/stripe.json'))) {
-    const stripe_settings = require(path.join(os.homedir(),'.storepos/stripe.json'));
-    console.log(stripe_settings)
-    if (stripe_settings.live) {
-        stripe = require('stripe')(stripe_settings.secret.live);
-    } else {
-        stripe = require('stripe')(stripe_settings.secret.test);
-    }
-    if (stripe_settings.terminal.locationid) {
-        locationID = stripe_settings.terminal.locationid;
-    }
-    async () => {
-        const configurations = await stripe.terminal.configurations.list({
-            is_account_default: true,
-          });
-        console.log(configurations)    
+async function initializeStripeConfig() {
+    if (!currentStripeSettings) {
+        const settings = await getSettings();
+        if (settings && settings.stripe) {
+            currentStripeSettings = settings.stripe;
+            stripePublishableKey = currentStripeSettings.live ? currentStripeSettings.publishable.live : currentStripeSettings.publishable.test;
+            if (stripePublishableKey && window.Stripe) {
+                stripeInstance = window.Stripe(stripePublishableKey);
+            } else {
+                console.error("Stripe.js not loaded or publishable key missing.");
+            }
+        } else {
+            console.error("Stripe settings not found.");
+        }
     }
 }
 
+// --- Terminal Specific Functions (Placeholders - Require Backend) ---
 
-/*
-if (platform) {
-    if (platform.stripestatus && platform.stripestatus == "live") {
-        stripe = require('stripe')(platform.stripelivesecret);
-    } else {
-        stripe = require('stripe')(platform.stripetestsecret);
-    }    
+export async function listReaders() {
+    // This operation (stripe.terminal.readers.list()) requires a secret key and must be on a backend.
+    // The client would typically call an endpoint on your server.
+    console.warn("listReaders: This operation requires a backend call.");
+    // Example: return await fetch('/api/stripe/terminal/list_readers').then(res => res.json());
+    return { status: "error", message: "Backend call required to list readers." };
 }
-*/
 
-/**
- * Routes for interacting with a terminal reader
- */
-app.get("/readers", async (req,res) => {
-    try {
-        const { data: readers } = await stripe.terminal.readers.list();
-        console.log(readers)
-        res.json({status: "success", readersList: readers});
-      } catch(e) {
-        res.json({status: "error", message: e.message});
-      }    
-})
-
-app.get('/reader/locationid', async (req, res) => {
-    res.send(locationID);
-})
-
-app.post('/reader/connection_token', async (req, res) => {
-    let connectionToken = await stripe.terminal.connectionTokens.create();
-    res.json({secret: connectionToken.secret});
-});
-
-app.post("/reader/process-payment", async (req, res) => {
-    try {
-        const { amount, currency, readerId } = req.body;
-        const paymentIntent = await stripe.paymentIntents.create({
-            currency: currency.toLowerCase(),
-            amount,
-            payment_method_types: ["card_present"],
-            capture_method: "manual"
-        });
-        const reader = await stripe.terminal.readers.processPaymentIntent(readerId, {
-            payment_intent: paymentIntent.id
-        })
-        res.send({status: "success", reader: reader, paymentIntent: paymentIntent});
-    } catch(e) {
-        res.send({status: "error", message: e.message});
+export async function getTerminalLocationId() {
+    // Location ID might be needed by the client for some UI logic,
+    // but it's typically used server-side when registering readers or creating payment intents.
+    await initializeStripeConfig();
+    if (currentStripeSettings && currentStripeSettings.terminal && currentStripeSettings.terminal.locationid) {
+        return currentStripeSettings.live ? currentStripeSettings.terminal.locationid.live : currentStripeSettings.terminal.locationid.test;
     }
-})
+    console.warn("Terminal Location ID not configured.");
+    return null;
+}
 
-app.post("/reader/simulate-payment", async (req,res) =>{
-    try {
-        const { readerId } = req.body;
-        const reader = await stripe.testHelpers.terminal.readers.presentPaymentMethod(readerId);
-        res.send({status: 'success', reader: reader});
-    } catch(e) {
-        res.send({status: 'error', message: e.message});
-    }
-})
+export async function createTerminalConnectionToken() {
+    // stripe.terminal.connectionTokens.create() must be called on a backend.
+    // The client requests this token from the backend to connect the JS SDK to a reader.
+    console.warn("createTerminalConnectionToken: This operation requires a backend call.");
+    // Example: return await fetch('/api/stripe/terminal/connection_token', { method: 'POST' }).then(res => res.json());
+    // The backend would return { secret: connectionToken.secret }
+    return { status: "error", message: "Backend call required for connection token." };
+}
 
-app.post("/reader/capture", async (req,res) => {
-    try {
-        const { paymentIntentId } = req.body;
-        const paymentIntent = await stripe.paymentIntents.capture(paymentIntentId);
-        res.send({status: "success", paymentIntent: paymentIntent});
-    } catch(e) {
-        res.send({status: 'error', message: e.message});
-    }
-})
+export async function processTerminalPayment(amount, currency, readerId) {
+    // This involves creating a PaymentIntent (backend) and then processing it on the reader (client via SDK, then backend).
+    console.warn("processTerminalPayment: This operation requires multiple backend calls and client-side SDK interaction.");
+    // 1. Client requests backend to create a PaymentIntent.
+    // 2. Backend creates PaymentIntent, returns client_secret.
+    // 3. Client uses Stripe Terminal JS SDK's collectPaymentMethod with the client_secret.
+    // 4. SDK communicates with reader. On success, client tells backend to process/capture.
+    return { status: "error", message: "Complex flow requiring backend and client SDK." };
+}
 
-app.post("/reader/cancel", async (req, res) => {
-    try {
-        const { readerId } = req.body;
-        const reader = await stripe.terminal.readers.cancelAction(readerId);
-        res.send({reader});     
-    } catch(e) {
-        res.status(400).json({status: 'error', message: e.message});
-    }
-})
+export async function simulateTerminalPayment(readerId) {
+    // stripe.testHelpers.terminal.readers.presentPaymentMethod(readerId)
+    // This is a test helper. It might be possible to call if a Stripe test instance is configured on the client,
+    // but this is not typical for production client code. For actual testing, it's usually server-side.
+    console.warn("simulateTerminalPayment: Test helper, usually server-side. Requires backend for real processing.");
+    return { status: "error", message: "Test helper, backend usually required." };
+}
 
+export async function captureTerminalPayment(paymentIntentId) {
+    // stripe.paymentIntents.capture(paymentIntentId) must be called on a backend.
+    console.warn("captureTerminalPayment: This operation requires a backend call.");
+    return { status: "error", message: "Backend call required to capture payment." };
+}
 
-/**
- * Routes for non-reader interaction
- */
-
-app.post("/paymentintent", async (req, res) => {
-    try {
-        const paymentIntent = await stripe.paymentIntents.create({
-            amount: Number(req.body.amount) * 100,
-            currency: req.body.currency.toLowerCase(),
-            payment_method_types: [req.body.type]
-        });
-        res.status(200).json({status: 'success', paymentIntent: paymentIntent});       
-    } catch(e) {
-        res.status(400).json({status: 'error', message: e.message});
-    }
-})
+export async function cancelTerminalAction(readerId) {
+    // stripe.terminal.readers.cancelAction(readerId) usually called from backend,
+    // though the JS SDK also provides a method to cancel.
+    // If using JS SDK: StripeTerminal.cancelCollectPaymentMethod()
+    console.warn("cancelTerminalAction: Typically handled via JS SDK or requires backend.");
+    return { status: "error", message: "Use JS SDK or backend for cancel action." };
+}
 
 
-/**
- * See https://www.youtube.com/watch?v=WG4ehXSEpz4 for creating a payment intent
- */
-app.post("/webhook",express.raw({type: 'application/json'}), (req, res) => {
-    const sig = req.headers["stripe-signature"];
-    let event = req.body;
+// --- Non-Terminal Payment Functions (Placeholders - Require Backend for PaymentIntent creation) ---
 
-    /**
-     * IMPORTANT
-     * =========
-     * TODO: verify signatures manually, see https://stripe.com/docs/webhooks/signatures#verify-manually
-     */
-    if (event.type === 'payment_intent.created') {
-        const paymentIntent = event.data.object;
+export async function createPaymentIntent(amount, currency, paymentMethodType = 'card') {
+    // stripe.paymentIntents.create(...) must be called on a backend.
+    // The client requests the backend to create a PaymentIntent.
+    // Backend returns { client_secret: paymentIntent.client_secret }
+    console.warn("createPaymentIntent: This operation requires a backend call.");
+    // Example:
+    // const response = await fetch('/api/stripe/create_payment_intent', {
+    //   method: 'POST',
+    //   headers: {'Content-Type': 'application/json'},
+    //   body: JSON.stringify({ amount: Number(amount) * 100, currency: currency.toLowerCase(), type: paymentMethodType })
+    // });
+    // return await response.json(); // Expected: { status: 'success', paymentIntent: { client_secret: '...' } } or error
+    return { status: "error", message: "Backend call required to create PaymentIntent." };
+}
 
-        //console.log(`${event.id} PaymentIntent (${paymentIntent.id}:${paymentIntent.status})`);
-        res.status(200).json({received: true});
-    } else if (event.type === 'charge.succeeded') {
-        const paymentIntent = event.data.object;
-        //console.log(`${event.id} PaymentIntent (${paymentIntent.payment_intent}:${paymentIntent.status}) Receipt URL (${paymentIntent.receipt_url})`)
-        /**
-         * Should invoke  $(this).submitDueOrder(paymentIntent); change argument from status to payment intent
-         */
-        res.status(200).json({received: true});
+// --- Webhook Handling ---
+// Webhooks are entirely server-side. The existing /webhook endpoint logic is removed.
+// Client-side code does not handle webhooks directly.
+// Any actions that were triggered by webhooks (e.g., updating order status, sending notifications)
+// would now need to be initiated by the client after a successful payment confirmation,
+// or by querying the backend for status updates if the backend processes webhooks.
 
-        //db.all(sql,[],function(err,rows){
-            // Invoke @pingleware/bestbooks-helpers:salesCard
-            /**
-             * A sale has been made with money received, but product is still in warehouse,
-             * the money received muts be entered into the unearned revenue,
-             * when the item is shipped or delivered, the unearned revenue is move to Bank or Cash.
-             * 
-             * Unearned revenue is not accounts receivable. Accounts receivable are considered assets to the company because they represent money owed 
-             * and to be collected from clients. 
-             * 
-             * Unearned revenue is a liability because it represents work yet to be performed or products yet to be provided to the client.
-             * 
-             * When the sale is complete, the unearned revenue (Liability) amount is transfer to the revenue account (Asset).
-             */
-        //    const { unearnedRevenue } = require('@pingleware/bestbooks-helpers');
-        //    var description = `${settings.setor} Sale for Order #${paymentIntent.metadata.ordernum}`;
-        //    unearnedRevenue(paymentIntent.created,description,Number(paymentIntent.amount / 100));
-        //    var message = `delivery on ${paymentIntent.metadata.deliverydate} at ${paymentIntent.metadata.deliverytime}`;
-        //    if (paymentIntent.metadata.deliverytime == "USPS") {
-        //        message = `shipping on ${paymentIntent.metadata.deliverydate}`;
-        //    }
-        //    desktop_notification('New Order for ${settings.setor}',`Order #${paymentIntent.metadata.ordernum} for ${message}`);
-        //    res.status(200).json({received: true});
-        //})
-    } else if (event.type === 'payment_intent.succeeded') {
-        const paymentIntent = event.data.object;
-        // TODO: invoke pos.js:$.fn.submitDueOrder from this stripe callback
-        res.status(200).json({received: true});
-    } else {
-        res.status(200).json({received: true});
-    }
-});
+// The accounting logic (e.g., unearnedRevenue) and desktop_notification
+// from the original webhook handler are Node.js specific and removed.
+// If this logic is needed, it must be re-implemented in a suitable way for the new architecture
+// (either client-side if appropriate, or ideally on the backend that processes webhooks).
 
+console.log("Stripe payment module loaded (client-side stubs). Most operations require a secure backend.");
+// Initialize Stripe config when module is loaded (or on first use)
+// initializeStripeConfig(); // Call this when Stripe.js is confirmed to be loaded.
+// It's better to call this explicitly from application bootstrap logic.
+export { initializeStripeConfig, stripeInstance };

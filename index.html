@@ -1460,14 +1460,10 @@
 
 </div>
 
-<script> window.$ = window.jQuery = require('jquery'); </script>
+<!-- <script> window.$ = window.jQuery = require('jquery'); </script> REMOVED: jQuery will be provided by Webpack -->
 
-<script> 
-
-
-require('./renderer.js');
-
-    </script>
+<!-- renderer.js is now part of the webpack bundle and will be injected by HtmlWebpackPlugin -->
+    <!-- All other scripts that were loaded by renderer.js will also be part of the bundle -->
 
     <script src="https://js.stripe.com/v3/" async></script>
     <script src="https://js.stripe.com/terminal/v1/"></script>

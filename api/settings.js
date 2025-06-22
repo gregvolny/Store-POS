@@ -1,143 +1,93 @@
-const app = require( "express")();
-const server = require( "http" ).Server( app );
-const bodyParser = require( "body-parser" );
-const Datastore = require( "nedb" );
-const multer = require("multer");
-const fileUpload = require('express-fileupload');
-const fs = require('fs');
-const os = require('os');
+import { getDb } from '../src/database.js';
 
-const createDirectory = require("./functions");
-var _path = createDirectory('POS');
-_path = createDirectory('POS/uploads');
-const path = require("path");
+// Removed Express, multer, fs, os, path, etc. File handling for images is simplified.
 
+export async function getSettings() {
+    const db = await getDb();
+    const result = db.exec("SELECT settings_json FROM settings WHERE _id = 1");
 
-const storage = multer.diskStorage({
-    destination:  path.join(os.homedir(),'.storepos/POS/uploads'),
-    filename: function(req, file, callback){
-        callback(null, Date.now() + '.jpg'); // 
-    }
-});
-
-let upload = multer({storage: storage});
-
-app.use( bodyParser.json() );
-
-module.exports = app;
-
-_path = createDirectory('POS/server');
-_path = createDirectory('POS/server/databases');
- 
-let settingsDB = null;
-try {
-    settingsDB = new Datastore( {
-        filename: path.join(os.homedir(),".storepos/POS/server/databases/settings.db"),
-        autoload: true
-    } );    
-} catch(err) {}
-
-
-
-app.get( "/", function ( req, res ) {
-    res.send( "Settings API" );
-} );
-
-
-  
-app.get( "/get", function ( req, res ) {
-    settingsDB.findOne( {
-        _id: 1
-}, function ( err, docs ) {
-        res.send( docs );
-    } );
-} );
-
- 
-app.post( "/post", upload.single('imagename'), function ( req, res ) {
-
-    let image = '';
-
-    if(req.body.img != "") {
-        image = req.body.img;       
-    }
-
-    if(req.file) {
-        image = req.file.filename;  
-    }
-
-    if(req.body.remove == 1) {
-        const _path = path.join(os.homedir(),".storepos/POS/uploads/",req.body.img);
+    if (result.length > 0 && result[0].values.length > 0) {
         try {
-          if (fs.existsSync(_path)) fs.unlinkSync(_path)
-        } catch(err) {
-          console.error(err)
+            // The settings_json column stores the settings object as a JSON string.
+            // The original structure had { _id: 1, settings: {...} }
+            // We will return the inner 'settings' object directly.
+            const settingsData = JSON.parse(result[0].values[0][0]);
+            return settingsData.settings || settingsData; // Return inner settings object, or full if that's how it's stored
+        } catch (e) {
+            console.error("Error parsing settings JSON from DB:", e);
+            return {}; // Return empty object or default settings on error
         }
+    }
+    // This should ideally not happen due to INSERT OR IGNORE in database.js
+    console.warn("No settings found in database, returning empty object.");
+    return {};
+}
 
-        if(!req.file) {
-            image = '';
-        }
-    } 
+export async function saveSettings(settingsDataFromForm, imageFile = null) {
+    const db = await getDb();
+
+    let imageName = settingsDataFromForm.img || ''; // Existing image name
+
+    // Image removal logic (fs.unlinkSync) is removed. Client needs to handle this.
+    if (settingsDataFromForm.remove == 1 && settingsDataFromForm.img) {
+        console.log(`TODO: Handle removal of settings image: ${settingsDataFromForm.img}`);
+        imageName = '';
+    }
+
+    if (imageFile) {
+        // TODO: Handle image storage (e.g., to IndexedDB, get a new name or use file.name)
+        imageName = `logo_${Date.now()}.jpg`; // Placeholder for new image
+        console.log(`TODO: Handle upload/storage of new settings image: ${imageFile.name}. Assigned as ${imageName}`);
+    }
           
-    let Settings = {  
-        _id: 1,
+    // Construct the settings object as it was structured before
+    const fullSettingsObject = {
+        _id: 1, // Keep the original _id convention for the single settings document
         settings: {
-            "app": req.body.app,
-            "store": req.body.store,
-            "address_one": req.body.address_one,
-            "address_two":req.body.address_two,
-            "contact": req.body.contact,
-            "tax": req.body.tax,
-            "symbol": req.body.symbol,
-            "currency": req.body.currency,
-            "percentage": req.body.percentage,
-            "charge_tax": req.body.charge_tax,
-            "footer": req.body.footer,
-            "img": image,
-            "stripe": {
-                "category": req.body.stripemcc,
-                "live": (req.body.stripestatus ? true : false),
+            "app": settingsDataFromForm.app,
+            "store": settingsDataFromForm.store,
+            "address_one": settingsDataFromForm.address_one,
+            "address_two": settingsDataFromForm.address_two,
+            "contact": settingsDataFromForm.contact,
+            "tax": settingsDataFromForm.tax,
+            "symbol": settingsDataFromForm.symbol,
+            "currency": settingsDataFromForm.currency,
+            "percentage": settingsDataFromForm.percentage,
+            "charge_tax": settingsDataFromForm.charge_tax, // Ensure this is boolean or correct type
+            "footer": settingsDataFromForm.footer,
+            "img": imageName, // Use the processed image name
+            "stripe": { // Stripe settings are now part of the main JSON
+                "category": settingsDataFromForm.stripemcc,
+                "live": (settingsDataFromForm.stripestatus === 'live' || settingsDataFromForm.stripestatus === true), // Ensure boolean
                 "publishable": {
-                    "live": req.body.stripelivepublishable,
-                    "test": req.body.stripetestpublishable
+                    "live": settingsDataFromForm.stripelivepublishable,
+                    "test": settingsDataFromForm.stripetestpublishable
                 },
                 "secret": {
-                    "live": req.body.stripelivesecret,
-                    "test": req.body.stripetestsecret
+                    "live": settingsDataFromForm.stripelivesecret,
+                    "test": settingsDataFromForm.stripetestsecret
                 },
                 "terminal": {
                     "locationid": {
-                        "live": req.body.stripeterminallivelocationid,
-                        "test": req.body.stripeterminaltestlocationid
+                        "live": settingsDataFromForm.stripeterminallivelocationid,
+                        "test": settingsDataFromForm.stripeterminaltestlocationid
                     }
                 }
             }
         }       
-    }
+    };
 
-    console.log(Settings.settings.stripe);
-    fs.writeFileSync(path.join(os.homedir(),'.storepos/stripe.json'),JSON.stringify(Settings.settings.stripe));
+    // fs.writeFileSync for stripe.json is removed.
+    // console.log("Stripe settings (to be saved in DB):", fullSettingsObject.settings.stripe);
 
-    if(req.body.id == "") { 
-        settingsDB.insert( Settings, function ( err, settings ) {
-            if ( err ) res.status( 500 ).send( err );
-            else res.send( settings );
-        });
-    }
-    else { 
-        settingsDB.update( {
-            _id: 1
-        }, Settings, {}, function (
-            err,
-            numReplaced,
-            settings
-        ) {
-            if ( err ) res.status( 500 ).send( err );
-            else res.sendStatus( 200 );
-        } );
+    const settingsJsonString = JSON.stringify(fullSettingsObject);
 
-    }
+    // NeDB insert/update logic is combined into an UPSERT for SQLite
+    // The settings table is designed to have only one row with _id = 1.
+    db.run(
+        'UPDATE settings SET settings_json = ? WHERE _id = 1',
+        [settingsJsonString]
+    );
 
-});
-
- 
+    return { message: "Settings saved successfully.", newSettings: fullSettingsObject.settings };
+}
