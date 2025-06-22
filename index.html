@@ -13,6 +13,8 @@
     <link href="assets/plugins/dataTables/jquery.dataTables.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/plugins/dataTables/dataTables.bootstrap.min.css" rel="stylesheet" type="text/css" />    
     <link href="assets/css/pages.css" rel="stylesheet" type="text/css" />
+    <link rel="manifest" href="public/manifest.json">
+    <meta name="theme-color" content="#343a40">
     </head>
   <body>
     
@@ -1460,14 +1462,28 @@
 
 </div>
 
-<script> window.$ = window.jQuery = require('jquery'); </script>
+<script src="https://code.jquery.com/jquery-3.4.1.min.js" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
+<!-- <script> window.$ = window.jQuery = require('jquery'); </script> -->
 
-<script> 
-
+<script>
+// Register Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('public/sw.js')
+      .then(registration => {
+        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+      })
+      .catch(err => {
+        console.log('ServiceWorker registration failed: ', err);
+      });
+  });
+}
 
 require('./renderer.js');
 
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+    <script src="assets/js/database.js"></script>
 
     <script src="https://js.stripe.com/v3/" async></script>
     <script src="https://js.stripe.com/terminal/v1/"></script>

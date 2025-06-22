@@ -1,4 +1,4 @@
-const os = require('os');
+// const os = require('os'); // PWA: os module not available in browser
 
 let cart = [];
 let index = 0;
@@ -24,23 +24,24 @@ let order_index = 0;
 let user_index = 0;
 let product_index = 0;
 let transaction_index;
-let host = 'localhost';
-let path = require('path');
-let port = '8001';
-let moment = require('moment');
-let Swal = require('sweetalert2');
-let { ipcRenderer } = require('electron');
+let host = 'localhost'; // PWA: This might need to be configurable or based on window.location
+// let path = require('path'); // PWA: path module not available
+let port = '8001'; // PWA: This might need to be configurable
+let moment = require('moment'); // PWA: Ensure moment is loaded globally or via import if using modules
+let Swal = require('sweetalert2'); // PWA: Ensure Swal is loaded globally or via import
+// let { ipcRenderer } = require('electron'); // PWA: ipcRenderer not available
 let dotInterval = setInterval(function () { $(".dot").text('.') }, 3000);
-let Store = require('electron-store');
-const remote = require('electron').remote;
-const app = remote.app;
-let img_path = os.homedir() + '/.storepos/POS/uploads/';
-let api = 'http://' + host + ':' + port + '/api/';
-let btoa = require('btoa');
-let {jsPDF} = require('jspdf');
-let html2canvas = require('html2canvas');
-let JsBarcode = require('jsbarcode');
-let macaddress = require('macaddress');
+// let Store = require('electron-store'); // PWA: electron-store not available
+// const remote = require('electron').remote; // PWA: remote not available
+// const app = remote.app; // PWA: remote.app not available
+// let img_path = os.homedir() + '/.storepos/POS/uploads/'; // PWA: os.homedir() not available, img_path needs new strategy
+let img_path = 'uploads/'; // PWA: Placeholder, actual image strategy TBD
+let api = 'http://' + host + ':' + port + '/api/'; // PWA: This will be used for Stripe if server component remains
+let btoa = require('btoa'); // PWA: btoa is a global browser function, so this require might be removable if not doing anything special
+let {jsPDF} = require('jspdf'); // PWA: Ensure jsPDF is loaded globally or via import
+let html2canvas = require('html2canvas'); // PWA: Ensure html2canvas is loaded globally or via import
+let JsBarcode = require('jsbarcode'); // PWA: Ensure JsBarcode is loaded globally or via import
+// let macaddress = require('macaddress'); // PWA: macaddress module not available
 let categories = [];
 let holdOrderList = [];
 let customerOrderList = [];
@@ -51,10 +52,10 @@ let auth_error = 'Incorrect username or password';
 let auth_empty = 'Please enter a username and password';
 let holdOrderlocation = $("#randerHoldOrders");
 let customerOrderLocation = $("#randerCustomerOrders");
-let storage = new Store();
-let settings;
-let platform;
-let user = {};
+let storage = new Store(); // To be removed or replaced for PWA
+let settings = {}; // Initialize as object
+let platform = {}; // Initialize as object
+let user = {}; // Current logged-in user
 let start = moment().startOf('month');
 let end = moment();
 let start_date = moment(start).toDate();
@@ -65,34 +66,43 @@ let by_status = 1;
 
 window.POS = {};
 
-$(function () {
+// Call initializePOSData when the script is loaded.
+// jQuery's $(function() { ... }) is equivalent to $(document).ready(), so we'll keep that structure
+// but ensure our async data loading happens before most of it.
+$(async function () {
+    await initializePOSData(); // Load all initial data from DB
 
+    // The rest of the original $(function() { ... }) content can follow,
+    // ensuring it only runs after initializePOSData completes.
+    // However, much of the $(document).ready() logic was moved into initializePOSData.
+    // We'll keep specific event handlers or UI setups here if they don't depend on async data loaded above,
+    // or if they are already correctly placed within initializePOSData's $(document).ready().
+
+    // Example: daterangepicker setup can remain here as it's mostly UI.
     function cb(start, end) {
         $('#reportrange span').html(start.format('MMMM D, YYYY') + '  -  ' + end.format('MMMM D, YYYY'));
     }
 
-    $('#reportrange').daterangepicker({
-        startDate: start,
-        endDate: end,
-        autoApply: true,
-        timePicker: true,
-        timePicker24Hour: true,
-        timePickerIncrement: 10,
-        timePickerSeconds: true,
-        // minDate: '',
-        ranges: {
-            'Today': [moment().startOf('day'), moment()],
-            'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
-            'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment().endOf('day')],
-            'Last 30 Days': [moment().subtract(29, 'days').startOf('day'), moment().endOf('day')],
-            'This Month': [moment().startOf('month'), moment().endOf('month')],
-            'This Month': [moment().startOf('month'), moment()],
-            'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
-        }
-    }, cb);
-
-    cb(start, end);
-
+    if ($('#reportrange').length) { // Check if element exists before initializing
+        $('#reportrange').daterangepicker({
+            startDate: start, // Ensure 'start' and 'end' are defined appropriately if used here
+            endDate: end,
+            autoApply: true,
+            timePicker: true,
+            timePicker24Hour: true,
+            timePickerIncrement: 10,
+            timePickerSeconds: true,
+            ranges: {
+                'Today': [moment().startOf('day'), moment()],
+                'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
+                'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment().endOf('day')],
+                'Last 30 Days': [moment().subtract(29, 'days').startOf('day'), moment().endOf('day')],
+                'This Month': [moment().startOf('month'), moment().endOf('month')],
+                'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+            }
+        }, cb);
+        cb(start, end); // Initial call to set text
+    }
 });
 
 
@@ -112,91 +122,103 @@ $.fn.serializeObject = function () {
     return o;
 };
 
+// Initialize and load settings, user, auth from DB
+async function initializePOSData() {
+    await window.posDb.initDatabase(); // Ensure DB is ready
 
-auth = storage.get('auth');
-user = storage.get('user');
+    let authInfo = await window.posDb.get('authInfo');
+    let currentUser = await window.posDb.get('currentUser');
+    let storeDetails = await window.posDb.get('storeDetails');
+    let platformConfig = await window.posDb.get('platformConfig');
 
+    settings = storeDetails || {}; // Fallback to empty object if not found
+    platform = platformConfig || {}; // Fallback to empty object
+    user = currentUser || {}; // Fallback to empty object
 
-if (auth == undefined) {
-    $.get(api + 'users/check/', function (data) { });
-    $("#loading").show();
-    authenticate();
+    // Original Electron 'auth' was an object like {auth: true} or undefined
+    // Original 'user' was the user object.
+    // We'll mimic this for now. 'auth' global variable will be true if authInfo.authenticated is true
+    auth = authInfo && authInfo.authenticated;
 
-} else {
-
-    $('#loading').show();
-
-    setTimeout(function () {
-        $('#loading').hide();
-    }, 2000);
-
-    platform = storage.get('settings');
-
-    if (platform != undefined) {
-
-        if (platform.app == 'Network Point of Sale Terminal') {
-            api = 'http://' + platform.ip + ':' + port + '/api/';
-            perms = true;
-        }
-    }
-
-    $.get(api + 'users/user/' + user._id, function (data) {
-        user = data;
-        $('#loggedin-user').text(user.fullname);
-    });
-
-
-    $.get(api + 'settings/get', function (data) {
-        settings = data.settings;
-    });
-
-
-    $.get(api + 'users/all', function (users) {
-        allUsers = [...users];
-    });
-
-
-
-    $(document).ready(function () {
-
-        $(".loading").hide();
-
-        loadCategories();
-        loadProducts();
-        loadCustomers();
-
-
-        if (settings && settings.symbol) {
-            $("#price_curr, #payment_curr, #change_curr").text(settings.symbol);
-        }
-
-
+    if (!auth) {
+        // $.get(api + 'users/check/', function (data) { }); // This was likely for initial setup or checking server status, may not be needed or needs PWA equivalent
+        $("#loading").show(); // Keep loading indicator
+        authenticate(); // This function will need to be updated to use SQLite
+    } else {
+        $('#loading').show();
         setTimeout(function () {
-            if (settings == undefined && auth != undefined) {
-                $('#settingsModal').modal('show');
+            $('#loading').hide();
+        }, 500); // Reduced timeout
+
+        if (platform && platform.app === 'Network Point of Sale Terminal') {
+            // This mode implies connection to a server. For PWA, this might mean the API still points to a remote server.
+            // For now, we'll assume the 'api' variable will be updated if necessary based on these settings.
+            // This specific logic might change significantly as we decouple from Electron's multi-instance idea.
+            api = 'http://' + platform.ip + ':' + port + '/api/';
+            // perms = true; // Permissions will be loaded from the user object in SQLite
+        }
+
+        // User details are already in 'user' variable from posDb
+        if (user && user.fullname) {
+            $('#loggedin-user').text(user.fullname);
+        } else if (auth) { // If auth is true but user object is empty/missing fullname
+            console.warn("User is authenticated but user details are incomplete. Attempting to load default or prompt login.");
+            // This case might require re-authentication or error handling
+            // For now, let's assume 'user' object from DB is sufficient
+        }
+
+
+        // Settings are already in 'settings' variable from posDb
+
+        // $.get(api + 'users/all', function (users) { // This will be replaced by SQLite query
+        //    allUsers = [...users];
+        // });
+        // loadAllUsersFromDb(); // New function to load users from SQLite - will be called by loadUserList
+
+
+        // Document ready logic
+        $(document).ready(function () {
+            $(".loading").hide(); // Hide loading if not already hidden
+
+            // These will be refactored to use SQLite data
+            loadCategories();
+            loadProducts();
+            loadCustomers();
+
+            if (settings && settings.symbol) {
+                $("#price_curr, #payment_curr, #change_curr").text(settings.symbol);
             }
-            else {
-                vat = parseFloat(settings.percentage);
-                $("#taxInfo").text(settings.charge_tax ? vat : 0);
-            }
-
-        }, 1500);
-
-
-
-        $("#settingsModal").on("hide.bs.modal", function () {
 
             setTimeout(function () {
-                if (settings == undefined && auth != undefined) {
+                // Check if essential settings are missing
+                const essentialSettingsExist = settings && settings.store && settings.currency && settings.symbol;
+                if (!essentialSettingsExist && auth) {
                     $('#settingsModal').modal('show');
+                } else if (settings && settings.percentage) {
+                    vat = parseFloat(settings.percentage);
+                    $("#taxInfo").text(settings.charge_tax ? vat : 0);
                 }
-            }, 1000);
+            }, 1500);
 
+            $("#settingsModal").on("hide.bs.modal", function () {
+                setTimeout(function () {
+                    const essentialSettingsExist = settings && settings.store && settings.currency && settings.symbol;
+                    if (!essentialSettingsExist && auth) {
+                        $('#settingsModal').modal('show');
+                    }
+                }, 1000);
+            });
+
+            // Apply permissions
+            applyUserPermissions();
         });
+    }
+}
 
-
-        if (0 == user.perm_products) { $(".p_one").hide() };
-        if (0 == user.perm_categories) { $(".p_two").hide() };
+function applyUserPermissions() {
+    if (user && user._id) { // Check if user object is populated
+        if (user.perm_products == 0) { $(".p_one").hide() }; // Ensure comparison is correct
+        if (user.perm_categories == 0) { $(".p_two").hide() };
         if (0 == user.perm_transactions) { $(".p_three").hide() };
         if (0 == user.perm_users) { $(".p_four").hide() };
         if (0 == user.perm_settings) { $(".p_five").hide() };
@@ -1458,22 +1480,31 @@ if (auth == undefined) {
 
                 if (result.value) {
 
-                    $.ajax({
-                        url: api + 'users/user/' + id,
-                        type: 'DELETE',
-                        success: function (result) {
-                            loadUserList();
-                            Swal.fire(
-                                'Done!',
-                                'User deleted',
-                                'success'
-                            );
-
-                        }
-                    });
+                    // PWA Refactor: Delete user from SQLite
+                    deleteUserFromDb(id);
                 }
             });
         }
+
+async function deleteUserFromDb(userId) {
+    try {
+        if (userId == 1) { // Prevent deleting main admin
+            Swal.fire('Error', 'Cannot delete the main administrator account.', 'error');
+            return;
+        }
+        const db = await window.posDb.getDb();
+        db.run("DELETE FROM users WHERE _id = ?", [userId]);
+        await window.posDb.backupDatabase(); // Persist changes
+
+        console.log(`User with ID ${userId} deleted from SQLite.`);
+        await loadUserList(); // Refresh the list
+        Swal.fire('Done!', 'User deleted', 'success');
+
+    } catch (err) {
+        console.error("Error deleting user from SQLite:", err);
+        Swal.fire('Error', 'Could not delete user.', 'error');
+    }
+}
 
 
         $.fn.deleteCategory = function (id) {
@@ -1521,60 +1552,80 @@ if (auth == undefined) {
             loadCategoryList();
         });
 
+        async function loadAllUsersFromDb() {
+            try {
+                const db = await window.posDb.getDb();
+                const usersData = db.exec("SELECT * FROM users");
+                if (usersData.length > 0 && usersData[0].values) {
+                    allUsers = usersData[0].values.map(row => {
+                        // Reconstruct user object based on table columns from database.js
+                        // ['_id', 'fullname', 'username', 'password', 'status', 'perm_products', ...]
+                        return {
+                            _id: row[0],
+                            fullname: row[1],
+                            username: row[2],
+                            password: row[3], // This is still btoa'd
+                            status: row[4],
+                            perm_products: row[5],
+                            perm_categories: row[6],
+                            perm_transactions: row[7],
+                            perm_users: row[8],
+                            perm_settings: row[9],
+                            last_login: row[10]
+                        };
+                    });
+                } else {
+                    allUsers = [];
+                }
+                console.log("All users loaded from SQLite:", allUsers);
+            } catch (err) {
+                console.error("Error loading users from SQLite:", err);
+                allUsers = [];
+            }
+        }
 
-        function loadUserList() {
 
-            let counter = 0;
-            let user_list = '';
+        async function loadUserList() {
+            await loadAllUsersFromDb(); // Ensure allUsers is populated
+
+            let user_list_html = ''; // Renamed to avoid conflict with function name
             $('#user_list').empty();
-            $('#userList').DataTable().destroy();
+            if ($.fn.DataTable.isDataTable('#userList')) {
+                $('#userList').DataTable().destroy();
+            }
 
-            $.get(api + 'users/all', function (users) {
+            allUsers.forEach((userItem, index) => { // Renamed user to userItem to avoid conflict
+                let userState = [];
+                let class_name = '';
 
-
-
-                allUsers = [...users];
-
-                users.forEach((user, index) => {
-
-                    state = [];
-                    let class_name = '';
-
-                    if (user.status != "") {
-                        state = user.status.split("_");
-
-                        switch (state[0]) {
-                            case 'Logged In': class_name = 'btn-default';
-                                break;
-                            case 'Logged Out': class_name = 'btn-light';
-                                break;
-                        }
+                if (userItem.status && userItem.status !== "") {
+                    userState = userItem.status.split("_");
+                    switch (userState[0]) {
+                        case 'Logged In': class_name = 'btn-default'; break;
+                        case 'Logged Out': class_name = 'btn-light'; break;
                     }
+                }
 
-                    counter++;
-                    user_list += `<tr>
-            <td>${user.fullname}</td>
-            <td>${user.username}</td>
-            <td class="${class_name}">${state.length > 0 ? state[0] : ''} <br><span style="font-size: 11px;"> ${state.length > 0 ? moment(state[1]).format('hh:mm A DD MMM YYYY') : ''}</span></td>
-            <td>${user._id == 1 ? '<span class="btn-group"><button class="btn btn-dark"><i class="fa fa-edit"></i></button><button class="btn btn-dark"><i class="fa fa-trash"></i></button></span>' : '<span class="btn-group"><button onClick="$(this).editUser(' + index + ')" class="btn btn-warning"><i class="fa fa-edit"></i></button><button onClick="$(this).deleteUser(' + user._id + ')" class="btn btn-danger"><i class="fa fa-trash"></i></button></span>'}</td></tr>`;
-
-                    if (counter == users.length) {
-
-                        $('#user_list').html(user_list);
-
-                        $('#userList').DataTable({
-                            "order": [[1, "desc"]]
-                            , "autoWidth": false
-                            , "info": true
-                            , "JQueryUI": true
-                            , "ordering": true
-                            , "paging": false
-                        });
-                    }
-
-                });
-
+                user_list_html += `<tr>
+                    <td>${userItem.fullname}</td>
+                    <td>${userItem.username}</td>
+                    <td class="${class_name}">${userState.length > 0 ? userState[0] : ''} <br><span style="font-size: 11px;"> ${userState.length > 1 && userState[1] ? moment(userState[1]).format('hh:mm A DD MMM YYYY') : ''}</span></td>
+                    <td>${userItem._id == 1 ? '<span class="btn-group"><button class="btn btn-dark" disabled><i class="fa fa-edit"></i></button><button class="btn btn-dark" disabled><i class="fa fa-trash"></i></button></span>' : '<span class="btn-group"><button onClick="$(this).editUser(' + index + ')" class="btn btn-warning"><i class="fa fa-edit"></i></button><button onClick="$(this).deleteUser(' + userItem._id + ')" class="btn btn-danger"><i class="fa fa-trash"></i></button></span>'}</td>
+                </tr>`;
             });
+
+            $('#user_list').html(user_list_html);
+
+            if (allUsers.length > 0) {
+                $('#userList').DataTable({
+                    "order": [[1, "desc"]],
+                    "autoWidth": false,
+                    "info": true,
+                    "JQueryUI": true,
+                    "ordering": true,
+                    "paging": false // Assuming paging was intentionally false
+                });
+            }
         }
 
 
@@ -1715,10 +1766,22 @@ if (auth == undefined) {
             }).then((result) => {
 
                 if (result.value) {
-                    $.get(api + 'users/logout/' + user._id, function (data) {
-                        storage.delete('auth');
-                        storage.delete('user');
-                        ipcRenderer.send('app-reload', '');
+                    // PWA Refactor: Clear auth status and user data from SQLite
+                    // The API call to 'users/logout' might still be relevant if it does server-side session invalidation.
+                    // For a pure PWA, this might just be a client-side state change.
+                    // Assuming for now the API call is not strictly needed for client-side PWA logout.
+                    Promise.all([
+                        window.posDb.set('authInfo', { authenticated: false, userId: null }),
+                        window.posDb.set('currentUser', {}) // Clear current user
+                    ]).then(() => {
+                        console.log("User logged out, authInfo and currentUser cleared from SQLite.");
+                        auth = false;
+                        user = {};
+                        location.reload(); // Reload to reflect logged-out state
+                    }).catch(err => {
+                        console.error("Error clearing user data from SQLite on logout:", err);
+                        // Still attempt to reload
+                        location.reload();
                     });
                 }
             });
@@ -1751,26 +1814,22 @@ if (auth == undefined) {
                 );
             }
             else {
-                storage.set('settings', formData);
-
-                $(this).attr('action', api + 'settings/post');
-                $(this).attr('method', 'POST');
-
-
-                $(this).ajaxSubmit({
-                    contentType: 'application/json',
-                    success: function (response) {
-
-                        ipcRenderer.send('app-reload', '');
-
-                    }, error: function (data) {
-                        console.log(data);
-                    }
-
-                });
-
+                // PWA Refactor: Save to SQLite using window.posDb
+                window.posDb.set('storeDetails', formData)
+                    .then(() => {
+                        console.log("Store details saved to SQLite.");
+                        // Update global settings variable
+                        settings = formData;
+                        // For PWA, instead of ipcRenderer.send, we can reload or update UI
+                        // For now, a simple reload. Ideally, UI should update without full reload.
+                        Swal.fire('Settings Saved', 'Your settings have been saved locally.', 'success')
+                            .then(() => location.reload());
+                    })
+                    .catch(err => {
+                        console.error("Error saving store details to SQLite:", err);
+                        Swal.fire('Error', 'Could not save settings locally.', 'error');
+                    });
             }
-
         });
 
 
@@ -1787,10 +1846,22 @@ if (auth == undefined) {
                 );
             }
             else {
-                if (isNumeric(formData.till)) {
+                if (isNumeric(formData.till)) { // Assuming isNumeric is a defined helper
                     formData['app'] = $('#app').find('option:selected').text();
-                    storage.set('settings', formData);
-                    ipcRenderer.send('app-reload', '');
+                    // PWA Refactor: Save to SQLite using window.posDb
+                    window.posDb.set('platformConfig', formData)
+                        .then(() => {
+                            console.log("Platform config saved to SQLite.");
+                            // Update global platform variable
+                            platform = formData;
+                             // For PWA, instead of ipcRenderer.send, we can reload or update UI
+                            Swal.fire('Network Settings Saved', 'Your network settings have been saved locally.', 'success')
+                                .then(() => location.reload());
+                        })
+                        .catch(err => {
+                            console.error("Error saving platform config to SQLite:", err);
+                            Swal.fire('Error', 'Could not save network settings locally.', 'error');
+                        });
                 }
                 else {
                     Swal.fire(
@@ -1837,43 +1908,117 @@ if (auth == undefined) {
 
 
 
-            if (formData.password == atob(user.password) || formData.password == atob(allUsers[user_index].password) || formData.password == formData.pass) {
-                $.ajax({
-                    url: api + 'users/post',
-                    type: 'POST',
-                    data: JSON.stringify(formData),
-                    contentType: 'application/json; charset=utf-8',
-                    cache: false,
-                    processData: false,
-                    success: function (data) {
+            if (formData.password == atob(user.password) || (allUsers[user_index] && formData.password == atob(allUsers[user_index].password)) || formData.password == formData.pass) {
+                // PWA Refactor: Save user to SQLite
+                saveUserToDb(formData);
+            } else {
+                 if (formData.password !== formData.pass && (formData.id === "" || formData.password !== "" ) ) { // only show if new user or password is changed
+                    Swal.fire('Oops!', 'Passwords do not match!', 'warning');
+                 } else {
+                    // This case implies password wasn't changed or matched original, but other fields might have.
+                    // Or, it's a new user and password was empty (which should be caught by form validation ideally)
+                    // For existing user, if password field is empty, it means "don't change password".
+                    // If new user, password should be required.
+                     saveUserToDb(formData);
+                 }
+            }
+        });
 
-                        if (ownUserEdit) {
-                            ipcRenderer.send('app-reload', '');
-                        }
+async function saveUserToDb(userData) {
+    try {
+        const db = await window.posDb.getDb();
+        let isNewUser = !userData.id; // ID is empty for new users
 
-                        else {
-                            $('#userModal').modal('hide');
+        // Hash password if it's a new user or if password field is not empty (meaning it's being changed)
+        // Using btoa as placeholder for hashing, replace with secure hashing in real app
+        let passwordToSave = userData.password ? btoa(userData.password) : null;
 
-                            loadUserList();
-
-                            $('#Users').modal('show');
-                            Swal.fire(
-                                'Ok!',
-                                'User details saved!',
-                                'success'
-                            );
-                        }
-
-
-                    }, error: function (data) {
-                        console.log(data);
-                    }
-
-                });
-
+        if (isNewUser) {
+            if (!passwordToSave) {
+                 Swal.fire('Error', 'Password is required for new users.', 'error');
+                 return;
+            }
+            // For new user, ensure username is unique
+            const checkUser = db.prepare("SELECT _id FROM users WHERE username = :username");
+            checkUser.bind({ ':username': userData.username });
+            let existingUser = null;
+            if (checkUser.step()) {
+                existingUser = checkUser.getAsObject();
+            }
+            checkUser.free();
+            if (existingUser) {
+                Swal.fire('Error', 'Username already exists.', 'error');
+                return;
             }
 
-        });
+            db.run(
+                "INSERT INTO users (fullname, username, password, perm_products, perm_categories, perm_transactions, perm_users, perm_settings, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    userData.fullname, userData.username, passwordToSave,
+                    userData.perm_products === 'on' ? 1 : 0,
+                    userData.perm_categories === 'on' ? 1 : 0,
+                    userData.perm_transactions === 'on' ? 1 : 0,
+                    userData.perm_users === 'on' ? 1 : 0,
+                    userData.perm_settings === 'on' ? 1 : 0,
+                    "" // Initial status
+                ]
+            );
+        } else {
+            // Update existing user
+            // If passwordToSave is null, it means password field was empty, so don't update it.
+            if (passwordToSave) {
+                 db.run(
+                    "UPDATE users SET fullname = ?, username = ?, password = ?, perm_products = ?, perm_categories = ?, perm_transactions = ?, perm_users = ?, perm_settings = ? WHERE _id = ?",
+                    [
+                        userData.fullname, userData.username, passwordToSave,
+                        userData.perm_products === 'on' ? 1 : 0,
+                        userData.perm_categories === 'on' ? 1 : 0,
+                        userData.perm_transactions === 'on' ? 1 : 0,
+                        userData.perm_users === 'on' ? 1 : 0,
+                        userData.perm_settings === 'on' ? 1 : 0,
+                        userData.id
+                    ]
+                );
+            } else {
+                 db.run(
+                    "UPDATE users SET fullname = ?, username = ?, perm_products = ?, perm_categories = ?, perm_transactions = ?, perm_users = ?, perm_settings = ? WHERE _id = ?",
+                    [
+                        userData.fullname, userData.username,
+                        userData.perm_products === 'on' ? 1 : 0,
+                        userData.perm_categories === 'on' ? 1 : 0,
+                        userData.perm_transactions === 'on' ? 1 : 0,
+                        userData.perm_users === 'on' ? 1 : 0,
+                        userData.perm_settings === 'on' ? 1 : 0,
+                        userData.id
+                    ]
+                );
+            }
+
+        }
+        await window.posDb.backupDatabase(); // Persist changes
+
+        if (ownUserEdit && user._id == userData.id) {
+            // If current user edited their own details, update global 'user' and reload
+            const updatedUserStmt = db.prepare("SELECT * FROM users WHERE _id = :id");
+            updatedUserStmt.bind({':id': userData.id});
+            if(updatedUserStmt.step()) {
+                user = updatedUserStmt.getAsObject();
+                await window.posDb.set('currentUser', user);
+            }
+            updatedUserStmt.free();
+            location.reload(); // Reload to reflect changes, especially permissions
+        } else {
+            $('#userModal').modal('hide');
+            await loadUserList(); // Refresh the list
+            $('#Users').modal('show');
+            Swal.fire('Ok!', 'User details saved!', 'success');
+        }
+
+    } catch (err) {
+        console.error("Error saving user to SQLite:", err);
+        Swal.fire('Error', 'Could not save user details.', 'error');
+    }
+}
 
 
 
@@ -1927,15 +2072,14 @@ if (auth == undefined) {
                 $('#net_settings_form').show(500);
                 $('#settings_form').hide(500);
 
-                $("#ip").val(platform.ip);
-                $("#till").val(platform.till);
-
-                macaddress.one(function (err, mac) {
-                    $("#mac").val(mac);
-                });
+                // PWA: macaddress.one might not be available or relevant in browser
+                // We can pre-fill with a placeholder or leave it empty if it's not critical for PWA network mode
+                $("#ip").val(platform.ip || ''); // Use platform data from SQLite
+                $("#till").val(platform.till || ''); // Use platform data from SQLite
+                $("#mac").val(platform.mac || 'N/A in PWA'); // MAC address is not typically accessible in browsers
 
                 $("#app option").filter(function () {
-                    return $(this).text() == platform.app;
+                    return $(this).text() == (platform.app || 'Standalone Point of Sale'); // Default if not set
                 }).prop("selected", true);
             }
             else {
@@ -2436,32 +2580,41 @@ $('body').on("submit", "#account", function (e) {
         );
     }
     else {
+        // PWA Refactor: Authenticate against SQLite
+        const db = await window.posDb.getDb();
+        if (!db) {
+            Swal.fire('Error', 'Database not available. Please try again.', 'error');
+            return;
+        }
 
-        $.ajax({
-            url: api + 'users/login',
-            type: 'POST',
-            data: JSON.stringify(formData),
-            contentType: 'application/json; charset=utf-8',
-            cache: false,
-            processData: false,
-            success: function (data) {
-                if (data._id) {
-                    storage.set('auth', { auth: true });
-                    storage.set('user', data);
-                    ipcRenderer.send('app-reload', '');
-                }
-                else {
-                    Swal.fire(
-                        'Oops!',
-                        auth_error,
-                        'warning'
-                    );
-                }
+        const username = formData.username;
+        // Passwords should be securely hashed in a real app. Here we're using btoa as a placeholder like in database.js
+        const password = btoa(formData.password);
 
-            }, error: function (data) {
-                console.log(data);
+        try {
+            const stmt = db.prepare("SELECT * FROM users WHERE username = :username AND password = :password");
+            stmt.bind({ ':username': username, ':password': password });
+
+            let loggedInUser = null;
+            if (stmt.step()) {
+                loggedInUser = stmt.getAsObject();
             }
-        });
+            stmt.free();
+
+            if (loggedInUser && loggedInUser._id) {
+                await window.posDb.set('authInfo', { authenticated: true, userId: loggedInUser._id });
+                await window.posDb.set('currentUser', loggedInUser);
+                user = loggedInUser;
+                auth = true;
+                console.log("User authenticated via SQLite and data saved.");
+                location.reload();
+            } else {
+                Swal.fire('Oops!', auth_error, 'warning');
+            }
+        } catch (err) {
+            console.error("Error during SQLite login:", err);
+            Swal.fire('Error', 'An error occurred during login.', 'error');
+        }
     }
 });
 
