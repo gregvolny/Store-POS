@@ -48,23 +48,56 @@ export async function loginUser(username, password) {
 
     const newStatus = 'Logged In_' + new Date().toISOString();
     db.run('UPDATE users SET status = ? WHERE _id = ?', [newStatus, user._id]);
-    
+
     user.status = newStatus; // Update status in the returned object
+
+    // Fetch user roles
+    const rolesQuery = db.exec(`
+        SELECT r.role_name
+        FROM user_roles ur
+        JOIN roles r ON ur.role_id = r.role_id
+        WHERE ur.user_id = ?
+    `, [user._id]);
+
+    if (rolesQuery.length > 0 && rolesQuery[0].values.length > 0) {
+        user.roles = rolesQuery[0].values.map(row => row[0]); // Extracts role names into an array
+    } else {
+        user.roles = []; // No roles assigned or error
+    }
+
     return user;
 }
 
 export async function getAllUsers() {
     const db = await getDb();
+    // Fetch all users
     const usersQuery = db.exec("SELECT * FROM users");
     if (usersQuery.length === 0 || usersQuery[0].values.length === 0) {
         return [];
     }
     const columns = usersQuery[0].columns;
-    return usersQuery[0].values.map(row => {
+    const users = usersQuery[0].values.map(row => {
         const obj = {};
         columns.forEach((col, i) => obj[col] = row[i]);
         return obj;
     });
+
+    // For each user, fetch their roles
+    for (const user of users) {
+        const rolesQuery = db.exec(`
+            SELECT r.role_name
+            FROM user_roles ur
+            JOIN roles r ON ur.role_id = r.role_id
+            WHERE ur.user_id = ?
+        `, [user._id]);
+
+        if (rolesQuery.length > 0 && rolesQuery[0].values.length > 0) {
+            user.roles = rolesQuery[0].values.map(row => row[0]);
+        } else {
+            user.roles = [];
+        }
+    }
+    return users;
 }
 
 export async function deleteUser(userId) {
@@ -149,3 +182,48 @@ export async function saveUser(userData) {
 }
 
 // The /check route logic for ensuring a default admin is now handled during DB initialization in database.js
+
+export async function registerUser(userData) {
+    const { fullname, username, password } = userData;
+    if (!fullname || !username || !password) {
+        throw new Error("Full name, username, and password are required for registration.");
+    }
+
+    const db = await getDb();
+    const newId = Math.floor(Date.now() / 1000);
+    const encodedPassword = btoa(password); // Standard browser btoa
+
+    try {
+        // Insert user
+        db.run(
+            'INSERT INTO users (_id, username, password, fullname, perm_products, perm_categories, perm_transactions, perm_users, perm_settings, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [newId, username, encodedPassword, fullname,
+             1, 1, 1, 0, 0, // Default permissions for a 'cashier' like role (can be adjusted)
+             'Registered']
+        );
+
+        // Assign 'cashier' role
+        // First, get the role_id for 'cashier'
+        const cashierRoleQuery = db.exec("SELECT role_id FROM roles WHERE role_name = 'cashier'");
+        if (cashierRoleQuery.length === 0 || cashierRoleQuery[0].values.length === 0) {
+            // This should not happen if roles are seeded correctly
+            console.error("Default 'cashier' role not found during registration.");
+            // Optionally, proceed without assigning role or throw more specific error
+        } else {
+            const cashierRoleId = cashierRoleQuery[0].values[0][0];
+            db.run(
+                'INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)',
+                [newId, cashierRoleId]
+            );
+        }
+
+        return { _id: newId, username, fullname, message: "User registered successfully." };
+
+    } catch (e) {
+        if (e.message && e.message.includes("UNIQUE constraint failed: users.username")) {
+            throw new Error(`Username "${username}" is already taken.`);
+        }
+        console.error("Error during user registration in DB:", e);
+        throw new Error("User registration failed due to a database error.");
+    }
+}

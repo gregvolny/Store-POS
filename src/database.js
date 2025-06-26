@@ -128,7 +128,36 @@ async function initializeDatabase() {
     db.run(`CREATE INDEX IF NOT EXISTS idx_transactions_ref_number ON transactions(ref_number);`);
 
 
-    console.log("Initial schema (inventory, categories, customers, settings, users, transactions tables) created or verified.");
+    // Roles tables
+    db.run(`
+      CREATE TABLE IF NOT EXISTS roles (
+        role_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        role_name TEXT UNIQUE NOT NULL
+      );
+    `);
+    // Seed roles - using INSERT OR IGNORE to prevent errors if they already exist
+    db.run(`INSERT OR IGNORE INTO roles (role_name) VALUES ('admin');`);
+    db.run(`INSERT OR IGNORE INTO roles (role_name) VALUES ('cashier');`);
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS user_roles (
+        user_id INTEGER NOT NULL,
+        role_id INTEGER NOT NULL,
+        PRIMARY KEY (user_id, role_id),
+        FOREIGN KEY (user_id) REFERENCES users(_id) ON DELETE CASCADE,
+        FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE CASCADE
+      );
+    `);
+
+    // Assign 'admin' role to default admin user (user_id = 1)
+    // This assumes 'admin' role will get role_id 1 if table is empty, or finds existing.
+    db.run(`
+      INSERT OR IGNORE INTO user_roles (user_id, role_id)
+      SELECT 1, role_id FROM roles WHERE role_name = 'admin'
+      AND NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = 1 AND role_id = (SELECT role_id FROM roles WHERE role_name = 'admin'));
+    `);
+
+    console.log("Initial schema (inventory, categories, customers, settings, users, transactions, roles, user_roles tables) created or verified.");
 
     return db;
   } catch (err) {
