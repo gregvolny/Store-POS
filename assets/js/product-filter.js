@@ -16,11 +16,27 @@ $(document).ready(function(){
 
  
     function searchProducts () {        
-        $("#categories .btn-categories").removeClass("active");
-        var matcher = new RegExp($("#search").val(), 'gi');
-        $('.box').show().not(function(){
-            return matcher.test($(this).find('.name, .sku').text())
-        }).hide();
+        $("#categories .btn-categories").removeClass("active"); // Deactivate category buttons
+        $("#all").addClass("active"); // Highlight "All" category during search
+        var searchText = $("#search").val();
+        var matcher = new RegExp(searchText, 'gi');
+
+        // Target the product-card elements. The .box class is on the product-card itself.
+        // The product-card is wrapped in a div like <div class="col-lg-2...">
+        $('#parent > div').each(function() {
+            var $productCardWrapper = $(this); // This is the col-lg-2 div
+            var $productCard = $productCardWrapper.find('product-card.box'); // Get the product-card
+
+            if ($productCard.length > 0) {
+                const name = $productCard.attr('data-name') || '';
+                const sku = $productCard.attr('data-sku') || '';
+                if (matcher.test(name + ' ' + sku)) {
+                    $productCardWrapper.fadeIn(450);
+                } else {
+                    $productCardWrapper.fadeOut(450);
+                }
+            }
+        });
     }
 
     let $search = $("#search").on('input',function(){

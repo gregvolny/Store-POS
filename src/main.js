@@ -4,6 +4,11 @@ window.$ = jquery;         // Make $ global too
 
 import { initializeDatabase } from './database.js';
 import { initializeStripeConfig } from '../api/payment.js'; // Assuming path is correct
+import '../components/product-card.js'; // Import to register the product-card component
+import '../components/category-button.js'; // Import to register the category-button component
+import '../components/product-form-modal.js'; // Import to register the product-form-modal-content component
+import '../components/category-form-modal.js'; // Import to register the category-form-modal-content component
+
 
 // Import styles if not handled globally or via index.html template
 // import '../assets/css/bootstrap.min.css'; // Example
