@@ -8,6 +8,8 @@ import '../components/product-card.js'; // Import to register the product-card c
 import '../components/category-button.js'; // Import to register the category-button component
 import '../components/product-form-modal.js'; // Import to register the product-form-modal-content component
 import '../components/category-form-modal.js'; // Import to register the category-form-modal-content component
+import '../components/customer-form-modal-content.js'; // Import to register the customer-form-modal-content component
+import '../components/settings-modal-content.js'; // Import to register the settings-modal-content component
 
 
 // Import styles if not handled globally or via index.html template

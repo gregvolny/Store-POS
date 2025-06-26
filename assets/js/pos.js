@@ -359,7 +359,49 @@ $(function() {
     $.fn.deleteOrderById = function (orderId, orderType) { /* ... (as previously refactored) ... */ };
     $.fn.orderDetails = function (idx, orderType) { /* ... (as previously refactored, check customer name access) ... */ };
     $.fn.getCustomerOrders = async function () { /* ... (as previously refactored) ... */ };
-    $('#saveCustomer').on('submit', async function (e) { /* ... (as previously refactored) ... */ });
+    // $('#saveCustomer').on('submit', async function (e) { ... }); // Replaced by Web Component logic below
+
+    // Listener for the custom event from <customer-form-modal-content>
+    const customerFormModalContentElement = document.getElementById('customerFormModalContentElement');
+    if (customerFormModalContentElement) {
+        customerFormModalContentElement.addEventListener('save-customer', async (event) => {
+            const customerData = event.detail;
+            if (!customerData.name) { // Basic validation
+                Swal.fire('Validation Error', 'Customer Name is required.', 'error');
+                return;
+            }
+            try {
+                $(".loading").show();
+                // This modal was originally only for adding new customers
+                await CustomerService.addCustomer(customerData);
+                Swal.fire('Saved!', 'Customer has been saved.', 'success');
+
+                await loadCustomers(); // Reload customer dropdown in POS view and potentially other lists
+                $('#newCustomer').modal('hide'); // Hide the bootstrap modal
+
+                // Reset the form inside the web component for the next time it's opened
+                if (typeof customerFormModalContentElement.resetForm === 'function') {
+                    customerFormModalContentElement.resetForm();
+                }
+
+            } catch (error) {
+                console.error("Error saving customer:", error);
+                Swal.fire('Error', `Could not save customer: ${error.message || error}`, 'error');
+            } finally {
+                $(".loading").hide();
+            }
+        });
+    }
+
+    // Ensure the customer form component is reset when the modal is about to be shown
+    // This is particularly important if the modal is reused without destroying the component
+    $('#newCustomer').on('show.bs.modal', function () {
+        const customerFormElement = document.getElementById('customerFormModalContentElement');
+        if (customerFormElement && typeof customerFormElement.resetForm === 'function') {
+            customerFormElement.resetForm();
+        }
+    });
+
     $("#payment").on('input', function () { $(this).calculateChange(); });
     $.fn.calculateChange = function () { /* ... (as previously refactored) ... */ };
     $("#confirmPayment").on('click',async function () { /* ... (as previously refactored) ... */ });
@@ -436,10 +478,85 @@ $(function() {
     $('#log-out').click(async function () { /* ... (as previously refactored) ... */ });
     $('#settings_form').on('submit', async function (e) { /* ... (as previously refactored) ... */ });
     $('#net_settings_form').on('submit', async function (e) { /* ... (as previously refactored) ... */ });
-    $('#saveUser').on('submit', async function (e) { /* ... (as previously refactored) ... */ });
+    // $('#saveUser').on('submit', async function (e) { ... }); // Replaced by Web Component logic
+
+    // Listener for the custom event from <user-form-modal-content>
+    const userFormModalContentElement = document.getElementById('userFormModalContentElement');
+    if (userFormModalContentElement) {
+        userFormModalContentElement.addEventListener('save-user', async (event) => {
+            const userDataFromEvent = event.detail;
+            // Basic client-side validation already handled in component for password match
+            // and required fields for new user.
+            try {
+                $(".loading").show();
+                if (userDataFromEvent.id) { // Existing user
+                    await UserService.updateUser(userDataFromEvent.id, userDataFromEvent);
+                    Swal.fire('Updated!', 'User has been updated.', 'success');
+                } else { // New user
+                    await UserService.addUser(userDataFromEvent);
+                    Swal.fire('Saved!', 'User has been saved.', 'success');
+                }
+                await loadUserList(); // Reload user list in the #Users modal (table)
+                allUsers = await UserService.getAllUsers(); // Refresh global allUsers array for other parts of UI
+                if (typeof userFilter === "function") userFilter(allUsers); // Update user filter dropdown in transactions view if function exists
+                $('#userModal').modal('hide');
+            } catch (error) {
+                console.error("Error saving user:", error);
+                Swal.fire('Error', `Could not save user: ${error.message || error}`, 'error');
+            } finally {
+                $(".loading").hide();
+            }
+        });
+    }
+
+    // Update $.fn.editUser to use the web component
+    $.fn.editUser = async function (userId) { // Changed idx to userId for clarity
+        const selectedUser = allUsers.find(u => u._id.toString() === userId.toString()); // Ensure ID comparison is robust
+        if (selectedUser) {
+            ownUserEdit = (user._id.toString() === selectedUser._id.toString()); // Compare IDs robustly
+
+            const userComp = document.getElementById('userFormModalContentElement');
+            if (userComp) {
+                // Map user data to component's expected 'userData' property
+                const componentData = {
+                    id: selectedUser._id,
+                    fullname: selectedUser.fullname,
+                    username: selectedUser.username,
+                    // Map permissions (ensure names match component's expectations)
+                    perm_products: selectedUser.perm_products || false,
+                    perm_categories: selectedUser.perm_categories || false,
+                    perm_transactions: selectedUser.perm_transactions || false,
+                    perm_users: selectedUser.perm_users || false,
+                    perm_settings: selectedUser.perm_settings || false,
+                };
+                userComp.userData = componentData; // This will trigger set userData and _populateForm in component
+            }
+            // The component itself should handle visibility of permission fields based on ownUserEdit if needed,
+            // or we can pass another attribute/property like `can-edit-permissions`.
+            // For now, the component shows all permission fields.
+            // Original logic: if (ownUserEdit) { $('.perms').hide(); } else { $('.perms').show(); }
+            // This could be: if (userComp) userComp.canEditPermissions = !ownUserEdit; (if implemented in component)
+
+            $('#userModal').modal('show');
+        } else {
+            Swal.fire('Error', 'User not found for editing.', 'error');
+            console.error('User not found with ID:', userId, 'in allUsers:', allUsers);
+        }
+    };
+
     $('#app').change(function () { /* ... (as previously refactored) ... */ });
     $('#cashier').click(function () { /* ... (as previously refactored) ... */ });
-    $('#add-user').click(function () { /* ... (as previously refactored) ... */ });
+
+    // Update #add-user click to use the web component
+    $('#add-user').click(function () {
+        const userComp = document.getElementById('userFormModalContentElement');
+        if (userComp) {
+            userComp.resetForm(); // Ensures form is set for a new user
+        }
+        // The component's resetForm and set userData(null) should handle showing all fields correctly.
+        $('#userModal').modal('show');
+    });
+
     $('#settings').click(async function () { /* ... (as previously refactored) ... */ });
     $('#rmv_logo').click(function () { /* ... (DOM only) ... */ });
     $('#rmv_img').click(function () { /* ... (DOM only) ... */ });
