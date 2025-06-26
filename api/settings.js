@@ -30,14 +30,20 @@ export async function saveSettings(settingsDataFromForm, imageFile = null) {
 
     // Image removal logic (fs.unlinkSync) is removed. Client needs to handle this.
     if (settingsDataFromForm.remove == 1 && settingsDataFromForm.img) {
-        console.log(`TODO: Handle removal of settings image: ${settingsDataFromForm.img}`);
+        // console.log(`TODO: Handle removal of settings image: ${settingsDataFromForm.img}`); // Original TODO
+        // For static app without image upload, if 'remove' (likely for logo) is set, we clear the imageName.
         imageName = '';
+        console.log(`Logo image reference "${settingsDataFromForm.img}" will be removed. Actual file not deleted from assets.`);
     }
 
     if (imageFile) {
-        // TODO: Handle image storage (e.g., to IndexedDB, get a new name or use file.name)
-        imageName = `logo_${Date.now()}.jpg`; // Placeholder for new image
-        console.log(`TODO: Handle upload/storage of new settings image: ${imageFile.name}. Assigned as ${imageName}`);
+        // For this static version, new image uploads are not supported.
+        console.warn(`New logo image file "${imageFile.name}" was provided, but image uploads are not supported in this static version. The image will not be saved.`);
+        if (!settingsDataFromForm.img || settingsDataFromForm.remove == 1) {
+            imageName = '';
+        } else {
+            imageName = settingsDataFromForm.img; // Retain existing
+        }
     }
           
     // Construct the settings object as it was structured before
@@ -64,8 +70,9 @@ export async function saveSettings(settingsDataFromForm, imageFile = null) {
                     "test": settingsDataFromForm.stripetestpublishable
                 },
                 "secret": {
-                    "live": settingsDataFromForm.stripelivesecret,
-                    "test": settingsDataFromForm.stripetestsecret
+                    // Secrets are no longer stored client-side for security reasons.
+                    // "live": settingsDataFromForm.stripelivesecret, // REMOVED
+                    // "test": settingsDataFromForm.stripetestsecret  // REMOVED
                 },
                 "terminal": {
                     "locationid": {

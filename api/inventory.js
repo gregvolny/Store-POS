@@ -54,15 +54,24 @@ export async function saveProduct(productData, imageFile = null) {
     // File removal logic using 'fs' is removed.
     // This needs to be re-implemented if images are stored in IndexedDB or similar.
     if (productData.remove_img == 1 && productData.img) {
-        console.log(`TODO: Handle removal of image: ${productData.img}`);
+        // console.log(`TODO: Handle removal of image: ${productData.img}`); // Original TODO
+        // For static app without image upload, if 'remove_img' is set, we clear the imageName.
+        // Actual deletion from 'assets/images/' is not handled client-side.
         imageName = '';
+        console.log(`Image reference "${productData.img}" will be removed from product. Actual file not deleted from assets.`);
     }
 
     if (imageFile) {
-        // TODO: Handle image storage (e.g., to IndexedDB, get a new name or use file.name)
-        // For now, just using a placeholder.
-        imageName = `new_image_${Date.now()}.jpg`; // Placeholder for new image
-        console.log(`TODO: Handle upload/storage of new image: ${imageFile.name}. Assigned as ${imageName}`);
+        // For this static version, new image uploads are not supported.
+        // Retain existing image name if not explicitly removed.
+        // If productData.img was already set, and remove_img is not 1, imageName keeps productData.img
+        // If productData.img was empty, and imageFile is provided, we ignore imageFile.
+        console.warn(`New image file "${imageFile.name}" was provided, but image uploads are not supported in this static version. The image will not be saved.`);
+        if (!productData.img || productData.remove_img == 1) { // If there was no previous image or it was marked for removal
+            imageName = ''; // Ensure imageName is cleared if a new (unsupported) upload was attempted over nothing
+        } else {
+            imageName = productData.img; // Retain existing image if one was there and not removed.
+        }
     }
 
     const productRecord = {

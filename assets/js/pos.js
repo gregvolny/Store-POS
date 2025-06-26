@@ -2494,47 +2494,41 @@ function authenticate() {
 }
 
 
-$('body').on("submit", "#account", function (e) {
-    e.preventDefault();
-    let formData = $(this).serializeObject();
+    $('body').on("submit", "#account", async function (e) { // Added async
+        e.preventDefault();
+        let formData = $(this).serializeObject();
 
-    if (formData.username == "" || formData.password == "") {
+        if (formData.username == "" || formData.password == "") {
+            Swal.fire('Incomplete form!', auth_empty, 'warning');
+            return;
+        }
 
-        Swal.fire(
-            'Incomplete form!',
-            auth_empty,
-            'warning'
-        );
-    }
-    else {
+        try {
+            const loggedInUser = await UserService.loginUser(formData.username, formData.password);
 
-        $.ajax({
-            url: api + 'users/login',
-            type: 'POST',
-            data: JSON.stringify(formData),
-            contentType: 'application/json; charset=utf-8',
-            cache: false,
-            processData: false,
-            success: function (data) {
-                if (data._id) {
-                    storage.set('auth', { auth: true });
-                    storage.set('user', data);
-                    ipcRenderer.send('app-reload', '');
-                }
-                else {
-                    Swal.fire(
-                        'Oops!',
-                        auth_error,
-                        'warning'
-                    );
-                }
+            if (loggedInUser && loggedInUser._id) {
+                user = loggedInUser; // Populate global user variable
+                // auth = true; // Simple global auth flag, not using electron-store
 
-            }, error: function (data) {
-                console.log(data);
+                // Hide login form, show main app, load initial data
+                $("#loading").hide();
+                $(".main_app").show();
+                await loadInitialData(); // Call the main data loading function
+
+                // Original code reloaded the app via ipcRenderer.send('app-reload', '');
+                // For a web app, if a full reload isn't strictly necessary after login and data load,
+                // we can just proceed. If a clean state is desired, window.location.reload() could be used
+                // but ideally the UI updates dynamically. For now, dynamic update is assumed.
+                console.log("Login successful, app loaded.");
+
+            } else {
+                Swal.fire('Oops!', auth_error, 'warning');
             }
-        });
-    }
-});
+        } catch (error) {
+            console.error("Login error:", error);
+            Swal.fire('Login Failed!', error.message || 'An unexpected error occurred during login.', 'error');
+        }
+    });
 
 
 $('#quit').click(function () {

@@ -583,7 +583,7 @@
                         <div class="form-group">
                             <label for="userName"><span id="rmv_img" class="btn btn-xs btn-warning">Remove</span> Picture </label>                      
                             <div id="current_img"></div>
-                            <input type="file" name="imagename" id="imagename">                            
+                            <input type="file" name="imagename" id="imagename"> <small class="text-muted">(Uploads disabled in this version)</small>
                         </div>
   
                         <input type="submit" id="submitProduct" class="btn btn-primary btn-block waves-effect waves-light">
@@ -1106,7 +1106,7 @@
                                         <label for="userName"><span id="rmv_logo" class="btn btn-xs btn-warning">Remove</span> Logo </label>              
                                         <div id="current_logo"></div>                                        
                                        
-                                        <input type="file" name="imagename" id="logoname">                            
+                                        <input type="file" name="imagename" id="logoname"> <small class="text-muted">(Uploads disabled in this version)</small>
                                     </div>
                                     <div class="form-group">
                                         <label for="userName">Receipt Footer</label>
@@ -1122,17 +1122,10 @@
                                     <label for="userName">Stripe Live Publishable Key</label>
                                     <input type="text"  name="stripelivepublishable" class="form-control" id="stripeLivePublishable" value="">
                                 </div>
-                                <div class="form-group">
-                                    <label for="userName">Stripe Live Secret Key</label>
-                                    <input type="text" name="stripelivesecret" class="form-control" id="stripeLiveSecret" value="">
-                                </div>
+                                <!-- Stripe Secret Key fields removed for security for client-side static app -->
                                 <div class="form-group">
                                     <label for="userName">Stripe Test Publishable Key</label>
                                     <input type="text"  name="stripetestpublishable" class="form-control" id="stripeTestPublishable" value="">
-                                </div>
-                                <div class="form-group">
-                                    <label for="userName">Stripe Test Secret Key</label>
-                                    <input type="text" name="stripetestsecret" class="form-control" id="stripeTestSecret" value="">
                                 </div>
                                 <div class="form-group">
                                     <label for="userName">Stripe Terminal Live Location ID</label>
