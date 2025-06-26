@@ -1,3 +1,7 @@
+import jquery from 'jquery'; // Import jQuery
+window.jQuery = jquery;    // Make it global before other imports that might depend on it
+window.$ = jquery;         // Make $ global too
+
 import { initializeDatabase } from './database.js';
 import { initializeStripeConfig } from '../api/payment.js'; // Assuming path is correct
 
