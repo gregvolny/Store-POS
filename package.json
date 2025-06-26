@@ -63,7 +63,9 @@
     "electron-build": "electron-builder",
     "dist:mac": "electron-builder --mac --universal",
     "dist:linux": "electron-builder --linux",
-    "package-win": "electron-packager . POS --overwrite --asar=false --platform=win32 --arch=x64 --icon=assets/images/icon.ico --prune=true --out=release-builds --version-string.ProductName=\"POS\""
+    "package-win": "electron-packager . POS --overwrite --asar=false --platform=win32 --arch=x64 --icon=assets/images/icon.ico --prune=true --out=release-builds --version-string.ProductName=\"POS\"",
+    "build:pwa": "node esbuild.mjs",
+    "build:pwa:prod": "NODE_ENV=production node esbuild.mjs"
   },
   "browserslist": {
     "production": [
@@ -83,6 +85,8 @@
     "electron": "^13.6.6",
     "electron-builder": "^22.14.13",
     "electron-is-dev": "^1.1.0",
-    "nodemon": "^1.19.3"
+    "nodemon": "^1.19.3",
+    "esbuild": "^0.19.5",
+    "fs-extra": "^11.1.1"
   }
 }
